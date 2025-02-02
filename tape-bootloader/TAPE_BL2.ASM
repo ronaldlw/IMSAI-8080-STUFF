@@ -27,40 +27,65 @@
 ; A KEY.
 ;
 ;
+;  DATAPT EQU  02h   ; SIO 1 Channel B data port
+;  CNTRPT EQU  03h   ; SIO 1 Channel B control port
+;
+DATAPT  EQU     034     ; SIO 2 channel A data port
+CNTRPT  EQU     035     ; SIO 2 channel A control port
 
         ORG     0FD00H
 START:  LXI     D,1     ;WAIT ABOUT A SECOND SO A
         LXI     H,0     ;  PREVIOUS 'XOFF' CHARACTER
 SL0:    DAD     D       ;  HAS TIME TO STOP THE READER
         JNC     SL0
+;MYCODE
+        MVI     A,0CAH  ; MODE BYTE
+        OUT     03
+        MVI     A,027H  ; COMMAND BYTE
+        OUT     03
+        MVI     A,'*'
+        OUT     02
+        MVI     A,7  ; BELL
+        OUT     2
+LOOP:   IN      03
+        ANI     02
+        JZ      LOOP
+        MVI     A,7
+        OUT     2
+        IN      2
+        OUT     2
+        CPI     0DH  ;CARRAGE RETURN
+        JNZ     LOOP
+
+;END MYCODE
             ;
             ; INITALIZE SIO BOARD.
             ;
         MVI     A,0AAH  ;GET DUMMY MODE BYTE
-        OUT     3
+        OUT     CNTRPT
         MVI     A,40H   ;GET RESET COMMAND
-        OUT     3       ;ISSUE IT
+        OUT     CNTRPT  ;ISSUE IT
         MVI     A,0FAH
-        OUT     3       ;ISSUE MODE BYTE TO SIO
+        OUT     CNTRPT  ;ISSUE MODE BYTE TO SIO
         MVI     A,17H
-        OUT     3       ;ISSUE COMMAND BYTE
-        MVI     A,'*'   ;GET AND ASTERISK
-        OUT     02      ;PRINT IT
-        IN      02      ;THROW AWAY ANY CHAR IN BUFFER
-SL2:    IN      03      ;GET STATUS
-        JZ      SL2     ;KEEP WAITING
-        IN      02      ;READ CHAR AND IGNORE
+        OUT     CNTRPT  ;ISSUE COMMAND BYTE
+;        MVI     A,'*'   ;GET AND ASTERISK
+;        OUT     DATAPT  ;PRINT IT
+;        IN      DATAPT  ;THROW AWAY ANY CHAR IN BUFFER
+;SL2:    IN      CNTRPT  ;GET STATUS
+;        JZ      SL2     ;KEEP WAITING
+;        IN      DATAPT  ;READ CHAR AND IGNORE
         MVI     A,11H   ;GET 'XON' CHAR
-        OUT     02      ;START READER
+        OUT     DATAPT  ;START READER
 LOOP1:  MVI     E,0     ;CLEAR FLAG
         MVI     C,0     ;CLEAR CHECKSUM
-LOOP2:  IN      3       ;GET SIO STATUS
+LOOP2:  IN      CNTRPT  ;GET SIO STATUS
         ANI     2       ;CHECK FOR CHARACTER
         JZ      LOOP2   ;KEEP WAITING
         MOV     A,E     ;GET FLAG
         ORA     A       ;IS IT ZERO?
         JNZ     X1      ;NO, GO PROCESS A HEX CHAR
-        IN      2       ;YES, WE'RE LOOKING FOR A COLON
+        IN      DATAPT  ;YES, WE'RE LOOKING FOR A COLON
         ANI     127     ;STRIP OFF PARITY BIT
         CPI     ':'     ;IS IT A COLON?
         JNZ     LOOP2   ;NO, KEEP WAITING
@@ -73,7 +98,7 @@ LOOP2:  IN      3       ;GET SIO STATUS
 X1:     JP      Y1      ;JUMP IF LOW DIGIT
         ANI     127     ;ELSE STRIP OFF HIGH BIT
         MOV     E,A     ;PUT FLAG BACK IN E-REG
-        IN      2       ;GET THE CHAR
+        IN      DATAPT  ;GET THE CHAR
         ANI     127     ;STRIP OFF THE PARITY BIT
         CPI     '9'+1   ;IS IT .LE. '9'
         JM      X2      ;SKIP IF YES
@@ -88,7 +113,7 @@ X2:     ANI     0FH     ;GET HEX DIGIT
             ;
             ; PROCESS LOW DIGIT OF BYTE, THEN DECIDE WHAT TO DO WITH IT
             ;
-Y1:     IN      2       ;GET THE CHAR
+Y1:     IN      DATAPT  ;GET THE CHAR
         ANI     127     ;GET RID OF THE PARITY BIT
         CPI     '9'+1   ;HEX IS SUCH A PAIN.
         JM      Y2
@@ -116,8 +141,8 @@ Y2:     ANI     0FH
 STOP:   CMA             ;DISPLAY REASON FOR STOPPING
         OUT     0FFH
         MVI     A,13H   ;ELSE, GET 'XOFF' CHAR
-        OUT     2       ;TURN OFF READER
-STPL:   IN      3       ;WAIT TILL XMTR BUFFER EMPTY
+        OUT     DATAPT  ;TURN OFF READER
+STPL:   IN      DATAPT   ;WAIT TILL XMTR BUFFER EMPTY
         ANI     4
         JZ      STPL
         JMP     START

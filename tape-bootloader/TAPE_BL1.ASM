@@ -8,10 +8,15 @@
 
 ; NOTE THAT THIS LOADER IS A SLIGHTLY MODIFIED
 ; VERSION OF THE MAIN PAPER TAPE LOADER.
+;  DATAPT EQU  02h   ; SIO 1 Channel B data port
+;  CNTRPT EQU  03h   ; SIO 1 Channel B control port
+;
+        ORG     100H
+DATAPT  EQU     034     ; SIO 2 channel A data port
+CNTRPT  EQU     035     ; SIO 2 channel A control port
 
-        ORG     20H
 BOOT2:  MVI     A,13H   ;GET STOP CHAR
-        OUT     2       ;STOP THE READER
+        OUT     DATAPT  ;STOP THE READER
         MVI     B,CHKSM-BOOT2  ;GET SIZE OF LDR
         LXI     H,BOOT2 ;GET ADDRESS OF LDR
         XRA     A       ;CLEAR A AND CARRY
@@ -42,31 +47,31 @@ XXX:    JNZ     XXX     ;HANG UP IF NO GOOD.
             ;
         JMP STR         ;1ST TIME, SKIP RE-INIT STUFF.
 START:  MVI     A,0AAH  ;GET DUMMY MODE BYTE
-        OUT     3
+        OUT     CNTRPT
         MVI     A,40H   ;GET RESET COMMAND
-        OUT     3       ;ISSUE IT
+        OUT     CNTRPT  ;ISSUE IT
         MVI     A,0FAH
-        OUT     3       ;ISSUE MODE BYTE TO SIO
+        OUT     CNTRPT  ;ISSUE MODE BYTE TO SIO
         MVI     A,17H
-        OUT     3       ;ISSUE COMMAND BYTE
-SL:     IN      03      ;GET STATUS
+        OUT     CNTRPT  ;ISSUE COMMAND BYTE
+SL:     IN      CNTRPT  ;GET STATUS
         ANI     02      ;CHECK FOR CHAR READY
         JZ      SL      ;KEEP WAITING
-        IN      02      ;READ CHAR AND IGNORE
-STR:    IN      03      ;GET STATUS
+        IN      DATAPT  ;READ CHAR AND IGNORE
+STR:    IN      CNTRPT  ;GET STATUS
         ANI     1       ;MAKE SURE WE HAVE XMTR RDY
         JZ      STR
         MVI     A,11H   ;GET 'XON' CHAR
-        OUT     02      ;START READER
+        OUT     DATAPT  ;START READER
 LOOP1:  MVI     E,0     ;CLEAR FLAG
         MVI     C,0     ;CLEAR CHECKSUM
-LOOP2:  IN      3       ;GET SIO STATUS
+LOOP2:  IN      CNTRPT  ;GET SIO STATUS
         ANI     2       ;CHECK FOR CHARACTER
         JZ      LOOP2   ;KEEP WAITING
         MOV     A,E     ;GET FLAG
         ORA     A       ;IS IT ZERO?
         JNZ     X1      ;NO, GO PROCESS A HEX CHAR
-        IN      2       ;YES, WE'RE LOOKING FOR A COLON
+        IN      DATAPT  ;YES, WE'RE LOOKING FOR A COLON
         ANI     127     ;STROP OFF PARITY BIT
         CPI     ':'     ;IS IT A COLON?
         JNZ     LOOP2   ;NO, KEEP WAITING
@@ -79,7 +84,7 @@ LOOP2:  IN      3       ;GET SIO STATUS
 X1:     JP      Y1      ;JUMP IF LOW DIGIT
         ANI     127     ;ELSE STRIP OFF HIGH BIT
         MOV     E,A     ;PUT FLAG BACK IN E-REG
-        IN      2       ;GET THE CHAR
+        IN      DATAPT  ;GET THE CHAR
         ANI     127     ;STROP OFF THE PARITY BIT
         CPI     '9'+1   ;IS IT .LE. '9'
         JM      X2      ;SKIP IF YES
@@ -94,7 +99,7 @@ X2:     ANI     0FH     ;GET HEX DIGIT
             ;
             ; PROCESS LOW DIGIT OF BYTE, THEN DECIDE WHAT TO DO WITH
             ;
-Y1:     IN      2       ;GET THE CHAR
+Y1:     IN      DATAPT  ;GET THE CHAR
         ANI     127     ;GET RID OF PARITY BIT
         CPI     '9'+1   ;HEX IS SUCH A PAIN.
         JM      Y2
@@ -126,8 +131,8 @@ Y3:     MOV     D,A     ;PUT BYTE BACK IN D
         JZ      LOOP1   ;YES, GO GET NEXT RECORD
         LXI     H,START ;ELSE, GET RESTART ADDR
 STOP:   MVI     A,13H   ;GET 'XOFF' CHAR
-        OUT     2       ;TURN OFF READER
-STPL:   IN      3       ;WAIT TILL XMTR BUFFER EMPTY
+        OUT     DATAPT  ;TURN OFF READER
+STPL:   IN      CNTRPT  ;WAIT TILL XMTR BUFFER EMPTY
         ANI     4
         JZ      STPL
         PCHL            ;GO AWAY
@@ -171,5 +176,5 @@ FF3:    IN      0FEH    ;GET HIGH BYTE OF LOADER
         JMP     STOP    ;STOP TAPE, THEN GOTO LOADER.
 C1:     MVI     E,82H   ;SET FLAG FOR ADDRESS BYTE
         JMP     LOOP2
-CHKSM:  DB      0C8H    ;SELF-CHECKSUM FOR THIS LOADER
+CHKSM:  DB      0D0H    ;SELF-CHECKSUM FOR THIS LOADER
         END
